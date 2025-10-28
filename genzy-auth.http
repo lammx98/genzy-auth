@@ -1,0 +1,6 @@
+@genzy_auth_HostAddress = http://localhost:5115
+
+GET {{genzy_auth_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
