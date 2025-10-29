@@ -1,19 +1,54 @@
+using System.Security.Claims;
 using Genzy.Auth.DTO;
 using Genzy.Auth.Services;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Genzy.Auth.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
-public class AuthController : ControllerBase
+[Route("auth")]
+public class AuthController(AuthService authService) : ControllerBase
 {
-    private readonly AuthService _authService;
+    private readonly AuthService _authService = authService;
 
-    public AuthController(AuthService authService)
+    [HttpGet("google-login")]
+    public IActionResult GoogleLogin(string? returnUrl = "/")
     {
-        _authService = authService;
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = Url.Action(nameof(GoogleCallback), new { returnUrl })
+        };
+        return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+    }
+
+    [HttpGet("google-callback")]
+    public async Task<IActionResult> GoogleCallback(string? returnUrl = "/")
+    {
+        var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        var claims = result.Principal?.Identities.FirstOrDefault()?.Claims;
+
+        var email = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
+        var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+
+        // TODO: tạo JWT token cho frontend
+        var jwt = "fake.jwt.token";
+
+        return Redirect($"https://localhost:3000/auth/callback?token={jwt}");
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public IActionResult Me()
+    {
+        return Ok(new
+        {
+            Name = User.Identity?.Name,
+            Email = User.FindFirstValue(ClaimTypes.Email)
+        });
     }
 
     [HttpPost("register")]
