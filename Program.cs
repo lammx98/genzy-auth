@@ -1,8 +1,8 @@
 using System.Text;
-using genzy_auth.Configuration;
-using genzy_auth.Data;
-using genzy_auth.Models;
-using genzy_auth.Services;
+using Genzy.Auth.Configuration;
+using Genzy.Auth.Data;
+using Genzy.Auth.Models;
+using Genzy.Auth.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -19,20 +19,8 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSetting
 builder.Services.AddSingleton(jwtSettings ?? throw new Exception("JWT Settings not configured"));
 
 // Add DB context
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
+builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
-// Configure Identity
-builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
-{
-    options.Password.RequireDigit = true;
-    options.Password.RequiredLength = 8;
-    options.Password.RequireNonAlphanumeric = true;
-    options.Password.RequireUppercase = true;
-    options.Password.RequireLowercase = true;
-})
-.AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
 
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
@@ -65,8 +53,9 @@ builder.Services.AddAuthentication(options =>
 });
 
 // Add services
-builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<TokenService>();
 
 var app = builder.Build();
 

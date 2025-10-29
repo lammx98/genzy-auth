@@ -1,11 +1,12 @@
-namespace genzy_auth.Models;
+using Genzy.Base.Models;
 
-public class RefreshToken
+namespace Genzy.Auth.Models;
+
+public class RefreshToken : BaseModel
 {
-    public int Id { get; set; }
     public required string Token { get; set; }
-    public required string UserId { get; set; }
+    public required string AccountId { get; set; }
     public required DateTime ExpiryDate { get; set; }
     public bool IsRevoked { get; set; }
-    public ApplicationUser? User { get; set; }
+    public Account? Account { get; set; }
 }

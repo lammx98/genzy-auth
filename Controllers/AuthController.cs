@@ -1,9 +1,9 @@
-using genzy_auth.Models;
-using genzy_auth.Services;
+using Genzy.Auth.DTO;
+using Genzy.Auth.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace genzy_auth.Controllers;
+namespace Genzy.Auth.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]

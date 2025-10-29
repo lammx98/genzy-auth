@@ -1,4 +1,4 @@
-namespace genzy_auth.Configuration;
+namespace Genzy.Auth.Configuration;
 
 public class JwtSettings
 {
