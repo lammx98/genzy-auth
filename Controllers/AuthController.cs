@@ -18,9 +18,10 @@ public class AuthController(AuthService authService) : ControllerBase
     [HttpGet("google-login")]
     public IActionResult GoogleLogin(string? returnUrl = "/")
     {
+        var redirectUrl = "http://localhost:3000/auth/callback";
         var properties = new AuthenticationProperties
         {
-            RedirectUri = Url.Action(nameof(GoogleCallback), new { returnUrl })
+            RedirectUri = redirectUrl
         };
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
@@ -37,7 +38,7 @@ public class AuthController(AuthService authService) : ControllerBase
         // TODO: tạo JWT token cho frontend
         var jwt = "fake.jwt.token";
 
-        return Redirect($"https://localhost:3000/auth/callback?token={jwt}");
+        return Redirect($"http://localhost:3000/auth/callback?token={jwt}");
     }
 
     [Authorize]
