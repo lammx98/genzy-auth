@@ -1,33 +1,37 @@
+using System.Text.Json;
 using Genzy.Auth.Data;
 using Genzy.Auth.DTO;
 using Genzy.Auth.Models;
-using Microsoft.AspNetCore.Identity;
+using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 
 namespace Genzy.Auth.Services;
 
 public class AuthService(
     TokenService tokenService,
-AccountService accountService,
-    AppDbContext context)
+    AccountService accountService,
+    AppDbContext context,
+    IConfiguration configuration,
+    IHttpClientFactory httpClientFactory)
 {
     private readonly AppDbContext _context = context;
     private readonly AccountService _accountService = accountService;
     private readonly TokenService _tokenService = tokenService;
+    private readonly IConfiguration _configuration = configuration;
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
         var user = await _accountService.FindByEmailAsync(request.Email);
         if (user == null)
         {
-            throw new Exception("User not found");
+            throw new Exception("Invalid email or password");
         }
 
-        // var result = await _signInManager.CheckPasswordSignInAsync(user, request.Password, false);
-        // if (!result.Succeeded)
-        // {
-        //     throw new Exception("Invalid password");
-        // }
+        if (!_accountService.VerifyPassword(user, request.Password))
+        {
+            throw new Exception("Invalid email or password");
+        }
 
         return await GenerateAuthResponseAsync(user);
     }
@@ -64,9 +68,14 @@ AccountService accountService,
 
         if (refreshToken.ExpiryDate < DateTime.UtcNow || refreshToken.IsRevoked)
         {
-            throw new Exception("Refresh token expired");
+            throw new Exception("Refresh token expired or revoked");
         }
 
+        // Revoke the old refresh token (rotation)
+        refreshToken.IsRevoked = true;
+        await _context.SaveChangesAsync();
+
+        // Generate new tokens
         return await GenerateAuthResponseAsync(refreshToken.Account);
     }
 
@@ -107,11 +116,28 @@ AccountService accountService,
 
     public async Task<AuthResponse> HandleExternalLoginAsync(ExternalLoginRequest request)
     {
-        // Note: In a real application, you would verify the token with the provider
-        // and get the user information from them. This is a simplified version.
         var externalUser = await GetExternalUserInfoAsync(request);
 
-        var user = await _accountService.FindByEmailAsync(externalUser.Email!);
+        // Check if user already exists by external ID
+        var user = await _accountService.FindByExternalIdAsync(externalUser.Provider!, externalUser.ExternalId!);
+        
+        // If not found by external ID, check by email
+        if (user == null)
+        {
+            user = await _accountService.FindByEmailAsync(externalUser.Email!);
+            
+            // If user exists with same email but different provider, link the accounts
+            if (user != null && string.IsNullOrEmpty(user.ExternalId))
+            {
+                user.Provider = externalUser.Provider;
+                user.ExternalId = externalUser.ExternalId;
+                user.AvatarUrl ??= externalUser.AvatarUrl;
+                _context.Accounts.Update(user);
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        // Create new account if not found
         if (user == null)
         {
             user = new Account
@@ -120,14 +146,14 @@ AccountService accountService,
                 Email = externalUser.Email,
                 FullName = externalUser.FullName,
                 AvatarUrl = externalUser.AvatarUrl,
-                Provider = request.Provider,
-                ExternalId = externalUser.Id
+                Provider = externalUser.Provider,
+                ExternalId = externalUser.ExternalId
             };
 
             var result = await _accountService.CreateAsync(user);
             if (result.Id == null)
             {
-                throw new Exception("Create account failed");
+                throw new Exception("Failed to create account");
             }
         }
 
@@ -136,33 +162,83 @@ AccountService accountService,
 
     private async Task<Account> GetExternalUserInfoAsync(ExternalLoginRequest request)
     {
-        // This is where you would make API calls to the respective providers
-        // to verify the token and get user information
-        // This is a simplified version
-        return request.Provider switch
+        return request.Provider.ToLower() switch
         {
-            "Google" => await GetGoogleUserInfoAsync(request.Token),
-            "Facebook" => await GetFacebookUserInfoAsync(request.Token),
-            "TikTok" => await GetTikTokUserInfoAsync(request.Token),
-            _ => throw new Exception("Invalid provider")
+            "google" => await GetGoogleUserInfoAsync(request.Token),
+            "facebook" => await GetFacebookUserInfoAsync(request.Token),
+            _ => throw new Exception($"Provider '{request.Provider}' is not supported")
         };
     }
 
-    private async Task<Account> GetGoogleUserInfoAsync(string token)
+    private async Task<Account> GetGoogleUserInfoAsync(string idToken)
     {
-        // Make API call to Google
-        throw new NotImplementedException();
+        try
+        {
+            var clientId = _configuration["Authentication:Google:ClientId"];
+            var settings = new GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { clientId! }
+            };
+
+            var payload = await GoogleJsonWebSignature.ValidateAsync(idToken, settings);
+
+            return new Account
+            {
+                Email = payload.Email,
+                UserName = payload.Email,
+                FullName = payload.Name,
+                AvatarUrl = payload.Picture,
+                Provider = "Google",
+                ExternalId = payload.Subject
+            };
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Failed to validate Google token: {ex.Message}");
+        }
     }
 
-    private async Task<Account> GetFacebookUserInfoAsync(string token)
+    private async Task<Account> GetFacebookUserInfoAsync(string accessToken)
     {
-        // Make API call to Facebook
-        throw new NotImplementedException();
-    }
+        try
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = await httpClient.GetAsync(
+                $"https://graph.facebook.com/me?fields=id,name,email,picture&access_token={accessToken}");
 
-    private async Task<Account> GetTikTokUserInfoAsync(string token)
-    {
-        // Make API call to TikTok
-        throw new NotImplementedException();
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception("Failed to validate Facebook token");
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var data = JsonSerializer.Deserialize<JsonElement>(json);
+
+            var id = data.GetProperty("id").GetString();
+            var name = data.GetProperty("name").GetString();
+            var email = data.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
+            var picture = data.TryGetProperty("picture", out var picProp) 
+                ? picProp.GetProperty("data").GetProperty("url").GetString() 
+                : null;
+
+            if (string.IsNullOrEmpty(email))
+            {
+                throw new Exception("Facebook account must have a verified email");
+            }
+
+            return new Account
+            {
+                Email = email,
+                UserName = email,
+                FullName = name,
+                AvatarUrl = picture,
+                Provider = "Facebook",
+                ExternalId = id
+            };
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Failed to validate Facebook token: {ex.Message}");
+        }
     }
 }

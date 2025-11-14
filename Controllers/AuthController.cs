@@ -101,11 +101,26 @@ public class AuthController(AuthService authService) : ControllerBase
         try
         {
             await _authService.RevokeTokenAsync(refreshToken);
-            return Ok();
+            return Ok(new { message = "Token revoked successfully" });
         }
         catch (Exception ex)
         {
-            return BadRequest(ex.Message);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] string refreshToken)
+    {
+        try
+        {
+            await _authService.RevokeTokenAsync(refreshToken);
+            return Ok(new { message = "Logged out successfully" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { error = ex.Message });
         }
     }
 

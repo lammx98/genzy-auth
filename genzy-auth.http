@@ -1,6 +1,68 @@
-@genzy_auth_HostAddress = http://localhost:5115
+@genzy_auth_HostAddress = https://localhost:7000
+@accessToken = your-jwt-token-here
+@refreshToken = your-refresh-token-here
 
-GET {{genzy_auth_HostAddress}}/weatherforecast/
-Accept: application/json
+### Register New User
+POST {{genzy_auth_HostAddress}}/auth/register
+Content-Type: application/json
 
-###
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!",
+  "fullName": "John Doe"
+}
+
+### Login with Email/Password
+POST {{genzy_auth_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+
+### External Login - Google
+POST {{genzy_auth_HostAddress}}/auth/external-login
+Content-Type: application/json
+
+{
+  "provider": "Google",
+  "token": "google-id-token-from-frontend"
+}
+
+### External Login - Facebook
+POST {{genzy_auth_HostAddress}}/auth/external-login
+Content-Type: application/json
+
+{
+  "provider": "Facebook",
+  "token": "facebook-access-token-from-frontend"
+}
+
+### Refresh Access Token
+POST {{genzy_auth_HostAddress}}/auth/refresh-token
+Content-Type: application/json
+
+"{{refreshToken}}"
+
+### Get Current User (Protected)
+GET {{genzy_auth_HostAddress}}/auth/me
+Authorization: Bearer {{accessToken}}
+
+### Logout (Revoke Refresh Token)
+POST {{genzy_auth_HostAddress}}/auth/logout
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+"{{refreshToken}}"
+
+### Revoke Token
+POST {{genzy_auth_HostAddress}}/auth/revoke-token
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+"{{refreshToken}}"
+
+### Google OAuth Flow (Browser)
+# Open this URL in browser to test Google login flow
+# GET {{genzy_auth_HostAddress}}/auth/google-login?returnUrl=/dashboard
