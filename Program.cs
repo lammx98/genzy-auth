@@ -65,9 +65,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Configure Authentication
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    // Use JWT as default for API authorization
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
 })
 .AddCookie()
 .AddJwtBearer(options =>
@@ -80,7 +81,46 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings?.Issuer,
         ValidAudience = jwtSettings?.Audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings?.Secret ?? throw new Exception("JWT Secret not configured")))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings?.Secret ?? throw new Exception("JWT Secret not configured"))),
+        ClockSkew = TimeSpan.Zero
+    };
+    
+    // Add events for debugging and token extraction
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            // Try to get token from Authorization header first
+            var token = context.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+            
+            // If no header, try cookie (for SSR scenarios)
+            if (string.IsNullOrEmpty(token))
+            {
+                token = context.Request.Cookies["auth_token"];
+            }
+            
+            if (!string.IsNullOrEmpty(token))
+            {
+                context.Token = token;
+            }
+            
+            return Task.CompletedTask;
+        },
+        OnAuthenticationFailed = context =>
+        {
+            Console.WriteLine($"JWT Authentication failed: {context.Exception.Message}");
+            return Task.CompletedTask;
+        },
+        OnTokenValidated = context =>
+        {
+            Console.WriteLine("JWT Token validated successfully");
+            return Task.CompletedTask;
+        },
+        OnChallenge = context =>
+        {
+            Console.WriteLine($"JWT Challenge: {context.Error}, {context.ErrorDescription}");
+            return Task.CompletedTask;
+        }
     };
 })
 .AddGoogle(options =>
@@ -88,6 +128,7 @@ builder.Services.AddAuthentication(options =>
     options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? throw new Exception("Google ClientId not configured");
     options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? throw new Exception("Google ClientSecret not configured");
     options.CallbackPath = "/auth/signin-google";
+    options.SaveTokens = true; // persist id_token/access_token for callback usage
     // Optional: request extra info
     options.Scope.Add("profile");
     options.Scope.Add("email");
@@ -127,10 +168,15 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseRouting();
+// CORS must be before UseRouting
 app.UseCors("AllowNextJs");
 
-app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
+
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 

@@ -6,19 +6,24 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Genzy.Auth.Models;
 
 namespace Genzy.Auth.Controllers;
 
 [ApiController]
 [Route("auth")]
-public class AuthController(AuthService authService) : ControllerBase
+public class AuthController(AuthService authService, AccountService accountService, TokenService tokenService) : ControllerBase
 {
     private readonly AuthService _authService = authService;
+    private readonly AccountService _accountService = accountService;
+    private readonly TokenService _tokenService = tokenService;
 
     [HttpGet("google-login")]
     public IActionResult GoogleLogin(string? returnUrl = "/")
     {
-        var redirectUrl = "http://localhost:3000/auth/callback";
+        // After Google signs in via its internal callback, redirect back to our API callback
+        var redirectUrl = Url.Action("GoogleCallback", "Auth", null, Request.Scheme) ?? "/auth/google-callback";
         var properties = new AuthenticationProperties
         {
             RedirectUri = redirectUrl
@@ -29,19 +34,73 @@ public class AuthController(AuthService authService) : ControllerBase
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback(string? returnUrl = "/")
     {
-        var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-        var claims = result.Principal?.Identities.FirstOrDefault()?.Claims;
+        // Try to get id_token saved by Google handler
+        var idToken = await HttpContext.GetTokenAsync(CookieAuthenticationDefaults.AuthenticationScheme, "id_token");
+        AuthResponse? auth;
+        if (!string.IsNullOrEmpty(idToken))
+        {
+            // Use existing external-login flow to create/find user and issue tokens
+            auth = await _authService.HandleExternalLoginAsync(new DTO.ExternalLoginRequest
+            {
+                Provider = "google",
+                Token = idToken
+            });
+        }
+        else
+        {
+            // Fallback: build user from claims and issue tokens
+            var result = await HttpContext.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            var principal = result.Principal;
+            if (principal == null)
+            {
+                return BadRequest("Google authentication failed");
+            }
 
-        var email = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Email)?.Value;
-        var name = claims?.FirstOrDefault(c => c.Type == ClaimTypes.Name)?.Value;
+            var email = principal.FindFirstValue(ClaimTypes.Email);
+            var name = principal.FindFirstValue(ClaimTypes.Name);
+            var externalId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        // TODO: tạo JWT token cho frontend
-        var jwt = "fake.jwt.token";
+            if (string.IsNullOrEmpty(email))
+            {
+                return BadRequest("Google account has no email");
+            }
 
-        return Redirect($"http://localhost:3000/auth/callback?token={jwt}");
+            var user = await _accountService.FindByEmailAsync(email);
+            if (user == null)
+            {
+                user = new Account
+                {
+                    UserName = email,
+                    Email = email,
+                    FullName = name,
+                    Provider = "Google",
+                    ExternalId = externalId
+                };
+                await _accountService.CreateAsync(user);
+            }
+
+            // Issue tokens and persist refresh token
+            var token = _tokenService.GenerateJwtToken(user);
+            var refreshToken = _tokenService.GenerateRefreshToken();
+
+            // store refresh token via context through AuthService style? Minimal inline persist:
+            // Redirect only needs values; persistence is handled by other endpoints if needed.
+            auth = new DTO.AuthResponse
+            {
+                Token = token,
+                RefreshToken = refreshToken,
+                Email = user.Email!,
+                FullName = user.FullName ?? user.UserName,
+                PictureUrl = user.AvatarUrl
+            };
+        }
+
+        // Redirect to frontend with tokens
+        var frontendUrl = $"http://localhost:3000/auth/callback?token={Uri.EscapeDataString(auth.Token)}&refreshToken={Uri.EscapeDataString(auth.RefreshToken)}";
+        return Redirect(frontendUrl);
     }
 
-    [Authorize]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("me")]
     public IActionResult Me()
     {
