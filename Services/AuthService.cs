@@ -2,6 +2,7 @@ using System.Text.Json;
 using Genzy.Auth.Data;
 using Genzy.Auth.DTO;
 using Genzy.Auth.Models;
+using Genzy.Base.Utils;
 using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,13 +13,15 @@ public class AuthService(
     AccountService accountService,
     AppDbContext context,
     IConfiguration configuration,
-    IHttpClientFactory httpClientFactory)
+    IHttpClientFactory httpClientFactory,
+    SnowflakeIdGenerator idGen)
 {
     private readonly AppDbContext _context = context;
     private readonly AccountService _accountService = accountService;
     private readonly TokenService _tokenService = tokenService;
     private readonly IConfiguration _configuration = configuration;
     private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
+    private readonly SnowflakeIdGenerator _idGen = idGen;
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
@@ -89,13 +92,14 @@ public class AuthService(
         }
     }
 
-    private async Task<AuthResponse> GenerateAuthResponseAsync(Account user)
+    public async Task<AuthResponse> GenerateAuthResponseAsync(Account user)
     {
         var jwtToken = _tokenService.GenerateJwtToken(user);
         var refreshToken = _tokenService.GenerateRefreshToken();
 
         var refreshTokenEntity = new RefreshToken
         {
+            Id = _idGen.NextId(),
             Token = refreshToken,
             AccountId = user.Id!,
             ExpiryDate = _tokenService.GetRefreshTokenExpiryTime()

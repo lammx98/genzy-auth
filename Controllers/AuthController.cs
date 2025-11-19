@@ -74,29 +74,19 @@ public class AuthController(AuthService authService, AccountService accountServi
                     Email = email,
                     FullName = name,
                     Provider = "Google",
-                    ExternalId = externalId
+                    ExternalId = externalId,
+                    AvatarUrl = principal.FindFirstValue("picture")
                 };
                 await _accountService.CreateAsync(user);
             }
 
-            // Issue tokens and persist refresh token
-            var token = _tokenService.GenerateJwtToken(user);
-            var refreshToken = _tokenService.GenerateRefreshToken();
-
-            // store refresh token via context through AuthService style? Minimal inline persist:
-            // Redirect only needs values; persistence is handled by other endpoints if needed.
-            auth = new DTO.AuthResponse
-            {
-                Token = token,
-                RefreshToken = refreshToken,
-                Email = user.Email!,
-                FullName = user.FullName ?? user.UserName,
-                PictureUrl = user.AvatarUrl
-            };
+            // Generate tokens and persist refresh token to database
+            auth = await _authService.GenerateAuthResponseAsync(user);
         }
 
         // Redirect to frontend with tokens
-        var frontendUrl = $"http://localhost:3000/auth/callback?token={Uri.EscapeDataString(auth.Token)}&refreshToken={Uri.EscapeDataString(auth.RefreshToken)}";
+        System.Console.WriteLine(auth.Token);
+        var frontendUrl = $"http://localhost:3020/auth/callback?token={Uri.EscapeDataString(auth.Token)}&refreshToken={Uri.EscapeDataString(auth.RefreshToken)}";
         return Redirect(frontendUrl);
     }
 

@@ -2,6 +2,7 @@ using System.Text;
 using Genzy.Auth.Configuration;
 using Genzy.Auth.Data;
 using Genzy.Auth.Services;
+using Genzy.Base.Utils;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -91,16 +92,38 @@ builder.Services.AddAuthentication(options =>
         OnMessageReceived = context =>
         {
             // Try to get token from Authorization header first
-            var token = context.Request.Headers["Authorization"].FirstOrDefault()?.Split(" ").Last();
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            string? token = null;
+            
+            if (!string.IsNullOrEmpty(authHeader))
+            {
+                var parts = authHeader.Split(" ");
+                if (parts.Length == 2 && parts[0] == "Bearer")
+                {
+                    token = parts[1];
+                }
+                else
+                {
+                    // Maybe token was sent without "Bearer" prefix
+                    token = authHeader;
+                }
+                Console.WriteLine($"Token from header: {token?.Substring(0, Math.Min(20, token.Length))}... (length: {token?.Length})");
+            }
             
             // If no header, try cookie (for SSR scenarios)
             if (string.IsNullOrEmpty(token))
             {
                 token = context.Request.Cookies["auth_token"];
+                if (!string.IsNullOrEmpty(token))
+                {
+                    Console.WriteLine($"Token from cookie: {token?.Substring(0, Math.Min(20, token.Length))}... (length: {token?.Length})");
+                }
             }
             
             if (!string.IsNullOrEmpty(token))
             {
+                // Clean up token - remove any whitespace
+                token = token.Trim();
                 context.Token = token;
             }
             
@@ -109,6 +132,10 @@ builder.Services.AddAuthentication(options =>
         OnAuthenticationFailed = context =>
         {
             Console.WriteLine($"JWT Authentication failed: {context.Exception.Message}");
+            if (context.Exception.InnerException != null)
+            {
+                Console.WriteLine($"Inner exception: {context.Exception.InnerException.Message}");
+            }
             return Task.CompletedTask;
         },
         OnTokenValidated = context =>
@@ -140,6 +167,13 @@ builder.Services.AddAuthentication(options =>
 });
 builder.Services.AddAuthorization();
 
+// Snowflake generator
+var nodeId = Environment.GetEnvironmentVariable("SNOWFLAKE_NODE_ID");
+builder.Services.AddSingleton(new SnowflakeIdGenerator(new SnowflakeOptions
+{
+    NodeId = long.TryParse(nodeId, out var n) ? n : 1000
+}));
+
 // Add services
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<AuthService>();
@@ -149,7 +183,7 @@ builder.Services.AddScoped<TokenService>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowNextJs",
-        policy => policy.WithOrigins("http://localhost:3000")
+        policy => policy.WithOrigins("http://localhost:3020")
                         .AllowAnyHeader()
                         .AllowAnyMethod()
                         .AllowCredentials());

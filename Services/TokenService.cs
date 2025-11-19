@@ -15,7 +15,7 @@ public class TokenService(JwtSettings jwtSettings)
     public string GenerateJwtToken(Account user)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.ASCII.GetBytes(_jwtSettings.Secret);
+        var key = Encoding.UTF8.GetBytes(_jwtSettings.Secret);
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(
@@ -32,7 +32,20 @@ public class TokenService(JwtSettings jwtSettings)
         };
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
-        return tokenHandler.WriteToken(token);
+        var tokenString = tokenHandler.WriteToken(token);
+        
+        // Validate token can be read back
+        try
+        {
+            var validatedToken = tokenHandler.ReadJwtToken(tokenString);
+            Console.WriteLine($"Generated valid JWT token for user {user.Email} (length: {tokenString.Length})");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WARNING: Generated token is invalid: {ex.Message}");
+        }
+        
+        return tokenString;
     }
 
     public string GenerateRefreshToken()
