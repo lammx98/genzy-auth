@@ -8,11 +8,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Genzy.Auth.Models;
+using Genzy.Base.Extensions;
 
 namespace Genzy.Auth.Controllers;
 
 [ApiController]
-[Route("auth")]
+[Route("")]
 public class AuthController(AuthService authService, AccountService accountService, TokenService tokenService) : ControllerBase
 {
     private readonly AuthService _authService = authService;
@@ -196,17 +197,17 @@ public class AuthController(AuthService authService, AccountService accountServi
             Console.WriteLine($"Received token length: {token?.Length ?? 0}");
             Console.WriteLine($"Token starts with: {token?.Substring(0, Math.Min(50, token?.Length ?? 0))}");
             Console.WriteLine($"Token ends with: {token?.Substring(Math.Max(0, (token?.Length ?? 0) - 20))}");
-            
+
             // Check if it's a valid JWT format (3 parts separated by dots)
             var parts = token?.Split('.');
             Console.WriteLine($"Token parts count: {parts?.Length ?? 0}");
-            
+
             if (parts?.Length == 3)
             {
                 Console.WriteLine($"Header part length: {parts[0].Length}");
                 Console.WriteLine($"Payload part length: {parts[1].Length}");
                 Console.WriteLine($"Signature part length: {parts[2].Length}");
-                
+
                 // Try to decode header
                 try
                 {
@@ -219,11 +220,11 @@ public class AuthController(AuthService authService, AccountService accountServi
                     Console.WriteLine($"Failed to decode header: {ex.Message}");
                 }
             }
-            
+
             // Try to validate with TokenService
             var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
             var jwtToken = handler.ReadJwtToken(token);
-            
+
             return Ok(new
             {
                 Valid = true,
@@ -239,14 +240,5 @@ public class AuthController(AuthService authService, AccountService accountServi
             Console.WriteLine($"Stack trace: {ex.StackTrace}");
             return BadRequest(new { error = ex.Message, stackTrace = ex.StackTrace });
         }
-    }
-}
-
-public static class Base64Extensions
-{
-    public static string PadBase64(this string input)
-    {
-        var padding = (4 - input.Length % 4) % 4;
-        return input + new string('=', padding);
     }
 }

@@ -16,8 +16,11 @@ builder.Configuration
     .AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true)
     .AddEnvironmentVariables();
 // Add services to the container.
-builder.Services.AddControllers();
 builder.Services.AddHttpClient();
+builder.Services.AddControllers(options =>
+{
+    options.Conventions.Add(new GlobalRoutePrefixConvention("api/v1/auth"));
+});
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
