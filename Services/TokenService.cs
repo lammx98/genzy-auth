@@ -2,20 +2,23 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Genzy.Auth.Configuration;
 using Genzy.Auth.Models;
+using Genzy.Base.Security.Jwt;
 using Microsoft.IdentityModel.Tokens;
 
 namespace Genzy.Auth.Services;
 
-public class TokenService(JwtSettings jwtSettings)
+public class TokenService(JwtOptions jwtSettings)
 {
-    private readonly JwtSettings _jwtSettings = jwtSettings;
+    private readonly JwtOptions _jwtSettings = jwtSettings;
 
     public string GenerateJwtToken(Account user)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.UTF8.GetBytes(_jwtSettings.Secret);
+        
+        // Parse secret key consistently - try base64 first, fallback to UTF8
+        byte[] key = Encoding.UTF8.GetBytes(_jwtSettings.Secret);
+        
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(

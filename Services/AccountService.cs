@@ -2,7 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Genzy.Auth.Data;
 using Genzy.Auth.Models;
-using Genzy.Base.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Genzy.Auth.Services;

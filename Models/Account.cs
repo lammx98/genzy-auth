@@ -1,5 +1,3 @@
-using Genzy.Base.Models;
-
 namespace Genzy.Auth.Models;
 
 public class Account

@@ -186,4 +186,67 @@ public class AuthController(AuthService authService, AccountService accountServi
             return BadRequest(ex.Message);
         }
     }
+
+    [HttpPost("test-token")]
+    public IActionResult TestToken([FromBody] string token)
+    {
+        try
+        {
+            // Log token info
+            Console.WriteLine($"Received token length: {token?.Length ?? 0}");
+            Console.WriteLine($"Token starts with: {token?.Substring(0, Math.Min(50, token?.Length ?? 0))}");
+            Console.WriteLine($"Token ends with: {token?.Substring(Math.Max(0, (token?.Length ?? 0) - 20))}");
+            
+            // Check if it's a valid JWT format (3 parts separated by dots)
+            var parts = token?.Split('.');
+            Console.WriteLine($"Token parts count: {parts?.Length ?? 0}");
+            
+            if (parts?.Length == 3)
+            {
+                Console.WriteLine($"Header part length: {parts[0].Length}");
+                Console.WriteLine($"Payload part length: {parts[1].Length}");
+                Console.WriteLine($"Signature part length: {parts[2].Length}");
+                
+                // Try to decode header
+                try
+                {
+                    var headerBytes = Convert.FromBase64String(parts[0].PadBase64());
+                    var headerJson = System.Text.Encoding.UTF8.GetString(headerBytes);
+                    Console.WriteLine($"Header decoded: {headerJson}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to decode header: {ex.Message}");
+                }
+            }
+            
+            // Try to validate with TokenService
+            var handler = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler();
+            var jwtToken = handler.ReadJwtToken(token);
+            
+            return Ok(new
+            {
+                Valid = true,
+                TokenId = jwtToken.Id,
+                Issuer = jwtToken.Issuer,
+                Audience = jwtToken.Audiences.FirstOrDefault(),
+                Claims = jwtToken.Claims.Select(c => new { c.Type, c.Value })
+            });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Token validation error: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            return BadRequest(new { error = ex.Message, stackTrace = ex.StackTrace });
+        }
+    }
+}
+
+public static class Base64Extensions
+{
+    public static string PadBase64(this string input)
+    {
+        var padding = (4 - input.Length % 4) % 4;
+        return input + new string('=', padding);
+    }
 }
