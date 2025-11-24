@@ -17,10 +17,7 @@ builder.Configuration
     .AddEnvironmentVariables();
 // Add services to the container.
 builder.Services.AddHttpClient();
-builder.Services.AddControllers(options =>
-{
-    options.Conventions.Add(new GlobalRoutePrefixConvention("api/v1/auth"));
-});
+builder.Services.AddControllers();
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new Microsoft.OpenApi.OpenApiInfo
@@ -29,6 +26,7 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "API documentation for Genzy Authenticate System"
     });
+    options.SupportNonNullableReferenceTypes();
 });
 
 // Configure shared JWT via base library (section name 'Jwt')
@@ -149,7 +147,7 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapGroup("/api/v1/auth").MapControllers();
 app.MapDefaultControllerRoute();
 
 app.Run();
