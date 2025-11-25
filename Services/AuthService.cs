@@ -2,6 +2,7 @@ using System.Text.Json;
 using Genzy.Auth.Data;
 using Genzy.Auth.DTO;
 using Genzy.Auth.Models;
+using Genzy.Base.Exceptions;
 using Genzy.Base.Utils;
 using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
@@ -28,12 +29,12 @@ public class AuthService(
         var user = await _accountService.FindByEmailAsync(request.Email);
         if (user == null)
         {
-            throw new Exception("Invalid email or password");
+            throw new BadException("Invalid Email");
         }
 
         if (!_accountService.VerifyPassword(user, request.Password))
         {
-            throw new Exception("Invalid email or password");
+            throw new BadException("Invalid Password");
         }
 
         return await GenerateAuthResponseAsync(user);
@@ -52,7 +53,7 @@ public class AuthService(
         var result = await _accountService.CreateAsync(user, request.Password);
         if (result.Id == null)
         {
-            throw new Exception("Create account failed");
+            throw new AppException("Create account failed");
         }
 
         return await GenerateAuthResponseAsync(user);
@@ -66,12 +67,12 @@ public class AuthService(
 
         if (refreshToken == null || refreshToken.Account == null)
         {
-            throw new Exception("Invalid refresh token");
+            throw new ValidationException("Invalid refresh token");
         }
 
         if (refreshToken.ExpiryDate < DateTime.UtcNow || refreshToken.IsRevoked)
         {
-            throw new Exception("Refresh token expired or revoked");
+            throw new BadException("Refresh token expired or revoked");
         }
 
         // Revoke the old refresh token (rotation)
@@ -124,12 +125,12 @@ public class AuthService(
 
         // Check if user already exists by external ID
         var user = await _accountService.FindByExternalIdAsync(externalUser.Provider!, externalUser.ExternalId!);
-        
+
         // If not found by external ID, check by email
         if (user == null)
         {
             user = await _accountService.FindByEmailAsync(externalUser.Email!);
-            
+
             // If user exists with same email but different provider, link the accounts
             if (user != null && string.IsNullOrEmpty(user.ExternalId))
             {
@@ -157,7 +158,7 @@ public class AuthService(
             var result = await _accountService.CreateAsync(user);
             if (result.Id == null)
             {
-                throw new Exception("Failed to create account");
+                throw new AppException("Failed to create account");
             }
         }
 
@@ -170,7 +171,7 @@ public class AuthService(
         {
             "google" => await GetGoogleUserInfoAsync(request.Token),
             "facebook" => await GetFacebookUserInfoAsync(request.Token),
-            _ => throw new Exception($"Provider '{request.Provider}' is not supported")
+            _ => throw new BadException($"Provider '{request.Provider}' is not supported")
         };
     }
 
@@ -198,7 +199,7 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            throw new Exception($"Failed to validate Google token: {ex.Message}");
+            throw new AppException($"Failed to validate Google token: {ex.Message}");
         }
     }
 
@@ -212,7 +213,7 @@ public class AuthService(
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new Exception("Failed to validate Facebook token");
+                throw new AppException("Failed to validate Facebook token");
             }
 
             var json = await response.Content.ReadAsStringAsync();
@@ -221,13 +222,13 @@ public class AuthService(
             var id = data.GetProperty("id").GetString();
             var name = data.GetProperty("name").GetString();
             var email = data.TryGetProperty("email", out var emailProp) ? emailProp.GetString() : null;
-            var picture = data.TryGetProperty("picture", out var picProp) 
-                ? picProp.GetProperty("data").GetProperty("url").GetString() 
+            var picture = data.TryGetProperty("picture", out var picProp)
+                ? picProp.GetProperty("data").GetProperty("url").GetString()
                 : null;
 
             if (string.IsNullOrEmpty(email))
             {
-                throw new Exception("Facebook account must have a verified email");
+                throw new AppException("Facebook account must have a verified email");
             }
 
             return new Account
@@ -242,7 +243,7 @@ public class AuthService(
         }
         catch (Exception ex)
         {
-            throw new Exception($"Failed to validate Facebook token: {ex.Message}");
+            throw new AppException($"Failed to validate Facebook token: {ex.Message}");
         }
     }
 }

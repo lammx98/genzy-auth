@@ -6,6 +6,10 @@ using Genzy.Base.Utils;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Logging;
+using Microsoft.AspNetCore.HttpOverrides;
+using Genzy.Base.Extensions;
+using Genzy.Auth.Mapping;
+using Genzy.Base.Security;
 IdentityModelEventSource.ShowPII = true;
 var builder = WebApplication.CreateBuilder(args);
 
@@ -91,7 +95,7 @@ authBuilder
 {
     options.ClientId = builder.Configuration["Authentication:Google:ClientId"] ?? throw new Exception("Google ClientId not configured");
     options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? throw new Exception("Google ClientSecret not configured");
-    options.CallbackPath = "/auth/signin-google";
+    options.CallbackPath = "/api/v1/auth/signin-google";
     options.SaveTokens = true; // persist id_token/access_token for callback usage
     // Optional: request extra info
     options.Scope.Add("profile");
@@ -116,6 +120,10 @@ builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<TokenService>();
 
+// AutoMapper, JWT auth, UserContext
+builder.Services.AddAutoMapper(typeof(AuthMappingProfile).Assembly);
+builder.Services.AddUserContext();
+
 // Add Cors
 builder.Services.AddCors(options =>
 {
@@ -124,6 +132,18 @@ builder.Services.AddCors(options =>
                         .AllowAnyHeader()
                         .AllowAnyMethod()
                         .AllowCredentials());
+});
+
+// Config Forward Headers
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor |
+                               ForwardedHeaders.XForwardedProto |
+                               ForwardedHeaders.XForwardedHost;
+
+    // WARN: ONLY CLEAR IN DEVELOPMENT ENVIRONMENT
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 var app = builder.Build();
@@ -144,10 +164,15 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+
+app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGroup("/api/v1/auth").MapControllers();
 app.MapDefaultControllerRoute();
+
+// Add exception handling middleware
+app.UseExceptionHandling();
 
 app.Run();

@@ -1,24 +1,37 @@
 using System.Security.Cryptography;
 using System.Text;
+using AutoMapper;
 using Genzy.Auth.Data;
+using Genzy.Auth.DTO;
 using Genzy.Auth.Models;
+using Genzy.Base.Exceptions;
+using Genzy.Base.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace Genzy.Auth.Services;
 
-public class AccountService(AppDbContext context)
+public class AccountService(AppDbContext context, UserContext userContext, IMapper mapper)
 {
     private readonly AppDbContext _context = context;
+    private readonly UserContext _userContext = userContext;
+    private readonly IMapper _mapper = mapper;
+
+    public async Task<AccountDTO> GetMeAsync()
+    {
+        var account = await _context.Accounts.AsNoTracking().FirstOrDefaultAsync(o => o.Id == _userContext.UserId);
+        if (account != null) return _mapper.Map<AccountDTO>(account);
+        throw new AppException("Failed to get your account");
+    }
 
     public async Task<Account> CreateAsync(Account account, string? password = null)
     {
         account.Id = Guid.NewGuid().ToString();
-        
+
         if (!string.IsNullOrEmpty(password))
         {
             account.PasswordHash = HashPassword(password);
         }
-        
+
         await _context.AddAsync(account);
         await _context.SaveChangesAsync();
         return account;

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Genzy.Auth.Models;
 using Genzy.Base.Extensions;
+using Genzy.Base.Wrappers;
 
 namespace Genzy.Auth.Controllers;
 
@@ -93,98 +94,52 @@ public class AuthController(AuthService authService, AccountService accountServi
 
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("me")]
-    public IActionResult Me()
+    public async Task<ActionResult<ApiResponse<AccountDTO>>> Me()
     {
-        return Ok(new
-        {
-            Name = User.Identity?.Name,
-            Email = User.FindFirstValue(ClaimTypes.Email)
-        });
+        return Ok(ApiResponse<AccountDTO>.New(await _accountService.GetMeAsync()));
     }
 
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
     {
-        try
-        {
-            var response = await _authService.RegisterAsync(request);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var response = await _authService.RegisterAsync(request);
+        return Ok(response);
     }
 
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
     {
-        try
-        {
-            var response = await _authService.LoginAsync(request);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var response = await _authService.LoginAsync(request);
+        return Ok(response);
     }
 
     [HttpPost("refresh-token")]
     public async Task<ActionResult<AuthResponse>> RefreshToken([FromBody] string refreshToken)
     {
-        try
-        {
-            var response = await _authService.RefreshTokenAsync(refreshToken);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var response = await _authService.RefreshTokenAsync(refreshToken);
+        return Ok(response);
     }
 
     [Authorize]
     [HttpPost("revoke-token")]
     public async Task<IActionResult> RevokeToken([FromBody] string refreshToken)
     {
-        try
-        {
-            await _authService.RevokeTokenAsync(refreshToken);
-            return Ok(new { message = "Token revoked successfully" });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        await _authService.RevokeTokenAsync(refreshToken);
+        return Ok(new { message = "Token revoked successfully" });
     }
 
     [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] string refreshToken)
     {
-        try
-        {
-            await _authService.RevokeTokenAsync(refreshToken);
-            return Ok(new { message = "Logged out successfully" });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+        await _authService.RevokeTokenAsync(refreshToken);
+        return Ok(new { message = "Logged out successfully" });
     }
 
     [HttpPost("external-login")]
     public async Task<ActionResult<AuthResponse>> ExternalLogin(ExternalLoginRequest request)
     {
-        try
-        {
-            var response = await _authService.HandleExternalLoginAsync(request);
-            return Ok(response);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(ex.Message);
-        }
+        var response = await _authService.HandleExternalLoginAsync(request);
+        return Ok(response);
     }
 }
