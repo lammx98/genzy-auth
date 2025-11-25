@@ -115,7 +115,7 @@ public class AuthService(
             RefreshToken = refreshToken,
             Email = user.Email!,
             FullName = user.FullName ?? user.UserName!,
-            PictureUrl = user.AvatarUrl
+            AvatarUrl = user.AvatarUrl
         };
     }
 
